@@ -274,6 +274,10 @@ Resources:
             Action:
               - "eks:DescribeNodegroup"
             Resource: !Sub "arn:${AWS::Partition}:eks:*:${AWS::AccountId}:nodegroup/*/*/*"
+          - Effect: "Allow"
+            Action:
+              - "redshift:DescribeClusters"
+            Resource: !Sub "arn:${AWS::Partition}:redshift:*:${AWS::AccountId}:cluster:*"
           # Actions that require wildcard resources with account restriction
           - Effect: "Allow"
             Action:
@@ -291,6 +295,8 @@ Resources:
               - "workspaces:DescribeWorkspaces"
               - "workspaces:DescribeWorkspaceDirectories"
               - "workspaces:DescribeWorkspacesConnectionStatus"
+              - "redshift-serverless:ListNamespaces"
+              - "redshift-serverless:ListWorkgroups"
             Resource: "*" # Wildcard required as actions do not support resource-level permissions
       Roles:
         - Ref: LambdaRole

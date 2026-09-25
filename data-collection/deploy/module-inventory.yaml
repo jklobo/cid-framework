@@ -56,7 +56,7 @@ Parameters:
     Description: ARN of a Lambda for Managing GlueTable
   AwsObjects:
     Type: CommaDelimitedList
-    Default: OpensearchDomains, ElasticacheClusters, RdsDbInstances, EBS, AMI, Snapshot, Ec2Instances, VpcInstances, RdsDbSnapshots, EKSClusters, LambdaFunctions, RdsDbClusters, WorkSpaces, NetworkInterfaces
+    Default: OpensearchDomains, ElasticacheClusters, RdsDbInstances, EBS, AMI, Snapshot, Ec2Instances, VpcInstances, RdsDbSnapshots, EKSClusters, LambdaFunctions, RdsDbClusters, WorkSpaces, NetworkInterfaces, RedshiftClusters, RedshiftServerlessNamespaces, RedshiftServerlessWorkgroups
     Description: Services for pulling price data
   DataBucketsKmsKeysArns:
     Type: String
@@ -1162,6 +1162,263 @@ Mappings:
               SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
           TableType: EXTERNAL_TABLE
 
+    RedshiftClusters:
+      path: redshift-clusters
+      collection: LINKED
+      table:
+        - Name: inventory_redshift_clusters_data
+          Parameters: { "classification" : "json", "compressionType": "none" }
+          PartitionKeys:
+          - Name: payer_id
+            Type: string
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+          StorageDescriptor:
+            Columns:
+            - Name: clusteridentifier
+              Type: string
+            - Name: clusternamespacearn
+              Type: string
+            - Name: clusterstatus
+              Type: string
+            - Name: clusteravailabilitystatus
+              Type: string
+            - Name: nodetype
+              Type: string
+            - Name: numberofnodes
+              Type: int
+            - Name: clustercreatetime
+              Type: string
+            - Name: dbname
+              Type: string
+            - Name: vpcid
+              Type: string
+            - Name: availabilityzone
+              Type: string
+            - Name: clustersubnetgroupname
+              Type: string
+            - Name: kmskeyid
+              Type: string
+            - Name: totalstoragecapacityinmegabytes
+              Type: bigint
+            - Name: clusterversion
+              Type: string
+            - Name: clusterrevisionnumber
+              Type: string
+            - Name: maintenancetrackname
+              Type: string
+            - Name: preferredmaintenancewindow
+              Type: string
+            - Name: nextmaintenancewindowstarttime
+              Type: string
+            - Name: allowversionupgrade
+              Type: boolean
+            - Name: pendingactions
+              Type: array<string>
+            - Name: deferredmaintenancewindows
+              Type: array<struct<DeferMaintenanceIdentifier:string,DeferMaintenanceStartTime:string,DeferMaintenanceEndTime:string>>
+            - Name: pendingmodifiedvalues
+              Type: struct<NodeType:string,NumberOfNodes:int,ClusterType:string,ClusterVersion:string,AutomatedSnapshotRetentionPeriod:int,ClusterIdentifier:string,PubliclyAccessible:boolean,EnhancedVpcRouting:boolean,MaintenanceTrackName:string,EncryptionType:string>
+            # MultiAZ is a STRING ("Enabled"/"Disabled"), not a boolean
+            - Name: multiaz
+              Type: string
+            - Name: multiazsecondary
+              Type: struct<AvailabilityZone:string>
+            - Name: encrypted
+              Type: boolean
+            - Name: publiclyaccessible
+              Type: boolean
+            - Name: enhancedvpcrouting
+              Type: boolean
+            - Name: ipaddresstype
+              Type: string
+            - Name: automatedsnapshotretentionperiod
+              Type: int
+            - Name: manualsnapshotretentionperiod
+              Type: int
+            # Typed struct, NOT flattened: an absent value must stay SQL NULL so that
+            # cross-region-copy-disabled clusters are not counted as compliant
+            - Name: clustersnapshotcopystatus
+              Type: struct<DestinationRegion:string,RetentionPeriod:bigint,ManualSnapshotRetentionPeriod:int,SnapshotCopyGrantName:string>
+            - Name: snapshotscheduleidentifier
+              Type: string
+            - Name: snapshotschedulestate
+              Type: string
+            - Name: expectednextsnapshotscheduletime
+              Type: string
+            - Name: lakehouseregistrationstatus
+              Type: string
+            - Name: catalogarn
+              Type: string
+            - Name: extracomputeforautomaticoptimization
+              Type: string
+            - Name: endpoint
+              Type: struct<Address:string,Port:int>
+            - Name: iamroles
+              Type: array<struct<IamRoleArn:string,ApplyStatus:string>>
+            - Name: vpcsecuritygroups
+              Type: array<struct<VpcSecurityGroupId:string,Status:string>>
+            - Name: clusterparametergroups
+              Type: array<struct<ParameterGroupName:string,ParameterApplyStatus:string>>
+            - Name: defaultiamrolearn
+              Type: string
+            - Name: tags
+              Type: array<struct<Key:string,Value:string>>
+            - Name: accountid
+              Type: string
+            - Name: collection_date
+              Type: string
+            - Name: region
+              Type: string
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            Location: !Sub s3://${DestinationBucket}/inventory/inventory-redshift-clusters-data/
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            SerdeInfo:
+              Parameters:
+                paths: ClusterIdentifier,ClusterNamespaceArn,ClusterStatus,ClusterAvailabilityStatus,NodeType,NumberOfNodes,ClusterCreateTime,DBName,VpcId,AvailabilityZone,ClusterSubnetGroupName,KmsKeyId,TotalStorageCapacityInMegaBytes,ClusterVersion,ClusterRevisionNumber,MaintenanceTrackName,PreferredMaintenanceWindow,NextMaintenanceWindowStartTime,AllowVersionUpgrade,PendingActions,DeferredMaintenanceWindows,PendingModifiedValues,MultiAZ,MultiAZSecondary,Encrypted,PubliclyAccessible,EnhancedVpcRouting,IpAddressType,AutomatedSnapshotRetentionPeriod,ManualSnapshotRetentionPeriod,ClusterSnapshotCopyStatus,SnapshotScheduleIdentifier,SnapshotScheduleState,ExpectedNextSnapshotScheduleTime,LakehouseRegistrationStatus,CatalogArn,ExtraComputeForAutomaticOptimization,Endpoint,IamRoles,VpcSecurityGroups,ClusterParameterGroups,DefaultIamRoleArn,Tags,accountid,collection_date,region
+              SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+          TableType: EXTERNAL_TABLE
+
+    RedshiftServerlessNamespaces:
+      path: redshift-serverless-namespaces
+      collection: LINKED
+      table:
+        - Name: inventory_redshift_serverless_namespaces_data
+          Parameters: { "classification" : "json", "compressionType": "none" }
+          PartitionKeys:
+          - Name: payer_id
+            Type: string
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+          StorageDescriptor:
+            Columns:
+            - Name: namespacename
+              Type: string
+            - Name: namespaceid
+              Type: string
+            - Name: namespacearn
+              Type: string
+            - Name: dbname
+              Type: string
+            - Name: status
+              Type: string
+            - Name: creationdate
+              Type: string
+            - Name: kmskeyid
+              Type: string
+            - Name: catalogarn
+              Type: string
+            - Name: lakehouseregistrationstatus
+              Type: string
+            - Name: defaultiamrolearn
+              Type: string
+            - Name: iamroles
+              Type: array<string>
+            - Name: logexports
+              Type: array<string>
+            - Name: accountid
+              Type: string
+            - Name: collection_date
+              Type: string
+            - Name: region
+              Type: string
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            Location: !Sub s3://${DestinationBucket}/inventory/inventory-redshift-serverless-namespaces-data/
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            SerdeInfo:
+              Parameters:
+                paths: namespaceName,namespaceId,namespaceArn,dbName,status,creationDate,kmsKeyId,catalogArn,lakehouseRegistrationStatus,defaultIamRoleArn,iamRoles,logExports,accountid,collection_date,region
+              SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+          TableType: EXTERNAL_TABLE
+
+    RedshiftServerlessWorkgroups:
+      path: redshift-serverless-workgroups
+      collection: LINKED
+      table:
+        - Name: inventory_redshift_serverless_workgroups_data
+          Parameters: { "classification" : "json", "compressionType": "none" }
+          PartitionKeys:
+          - Name: payer_id
+            Type: string
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+          StorageDescriptor:
+            Columns:
+            - Name: workgroupname
+              Type: string
+            - Name: workgroupid
+              Type: string
+            - Name: workgrouparn
+              Type: string
+            - Name: namespacename
+              Type: string
+            - Name: status
+              Type: string
+            - Name: creationdate
+              Type: string
+            - Name: basecapacity
+              Type: int
+            - Name: maxcapacity
+              Type: int
+            - Name: publiclyaccessible
+              Type: boolean
+            - Name: enhancedvpcrouting
+              Type: boolean
+            - Name: ipaddresstype
+              Type: string
+            - Name: port
+              Type: int
+            - Name: trackname
+              Type: string
+            - Name: pendingtrackname
+              Type: string
+            - Name: patchversion
+              Type: string
+            - Name: workgroupversion
+              Type: string
+            - Name: priceperformancetarget
+              Type: struct<level:int,status:string>
+            - Name: extracomputeforautomaticoptimization
+              Type: boolean
+            - Name: securitygroupids
+              Type: array<string>
+            - Name: subnetids
+              Type: array<string>
+            - Name: crossaccountvpcs
+              Type: array<string>
+            - Name: customdomainname
+              Type: string
+            - Name: customdomaincertificateexpirytime
+              Type: string
+            - Name: endpoint
+              Type: struct<address:string,port:int>
+            - Name: accountid
+              Type: string
+            - Name: collection_date
+              Type: string
+            - Name: region
+              Type: string
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            Location: !Sub s3://${DestinationBucket}/inventory/inventory-redshift-serverless-workgroups-data/
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            SerdeInfo:
+              Parameters:
+                paths: workgroupName,workgroupId,workgroupArn,namespaceName,status,creationDate,baseCapacity,maxCapacity,publiclyAccessible,enhancedVpcRouting,ipAddressType,port,trackName,pendingTrackName,patchVersion,workgroupVersion,pricePerformanceTarget,extraComputeForAutomaticOptimization,securityGroupIds,subnetIds,crossAccountVpcs,customDomainName,customDomainCertificateExpiryTime,endpoint,accountid,collection_date,region
+              SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+          TableType: EXTERNAL_TABLE
+
 Resources:
   LambdaRole:
     Type: AWS::IAM::Role
@@ -1552,6 +1809,26 @@ Resources:
                       service='ec2',
                       function_name='describe_network_interfaces',
                       obj_name='NetworkInterfaces[*]'
+                  ),
+                  'redshift-clusters': partial(
+                      paginated_scan,
+                      service='redshift',
+                      function_name='describe_clusters',
+                      obj_name='Clusters[*]'
+                  ),
+                  # Redshift Serverless is a separate client with camelCase members and
+                  # nextToken paging; the paginator handles the token and obj_name the casing
+                  'redshift-serverless-namespaces': partial(
+                      paginated_scan,
+                      service='redshift-serverless',
+                      function_name='list_namespaces',
+                      obj_name='namespaces[*]'
+                  ),
+                  'redshift-serverless-workgroups': partial(
+                      paginated_scan,
+                      service='redshift-serverless',
+                      function_name='list_workgroups',
+                      obj_name='workgroups[*]'
                   ),
               }
               account = account if isinstance(account, dict) else json.loads(account)
