@@ -241,14 +241,19 @@ Consequence for the dashboard: any "% of clusters with cross-region copy" measur
 denominator from `inventory_redshift_clusters_data` and treat absent as disabled. Counting rows
 that *have* the struct yields only the compliant clusters and silently reports 100%.
 
-**Must be a typed struct, not flattened.** This field is a direct exception to the general
-latitude in Constraints §5. If flattened with `to_json()`, a disabled cluster serializes to the
-literal string `'null'` rather than SQL `NULL`, so `IS NOT NULL` matches every row and every
-cluster appears compliant — a silent inversion of the resiliency tile. Type it as
+**Stays a typed struct.** `coding-standards.md` §1.8 prefers raw-JSON `string` columns for
+variable nested fields, and Constraints §5 applies that rule to most of this table — but
+`ClusterSnapshotCopyStatus` is the carve-out §1.8 reserves for "stable shapes on a pre-created
+table": four scalar members, no nested list, unchanged across API versions. Type it as
 `struct<destinationregion:string,retentionperiod:bigint,manualsnapshotretentionperiod:int,snapshotcopygrantname:string>`
-and query `clustersnapshotcopystatus.destinationregion IS NOT NULL`. The struct is small and
-fixed-shape, so there is no cost to typing it properly. Note `RetentionPeriod` is a `long` while
-`ManualSnapshotRetentionPeriod` is an `integer`.
+and query `clustersnapshotcopystatus.destinationregion IS NOT NULL`. Note `RetentionPeriod` is a
+`long` while `ManualSnapshotRetentionPeriod` is an `integer`.
+
+Two reasons to keep it typed rather than take the `string` default. It is the only nested field
+any view in this spec reads, so it is the one place native struct access earns its keep; and
+typing it removes the `'null'` hazard by construction — a copy-disabled cluster omits the key
+entirely, which reads as SQL `NULL` with no dependence on the collector guarding against
+`to_json(None)`. A `string` column would also work, but only while that guard holds.
 
 **Serverless has no such field.** Cross-region copy for serverless is an entirely separate
 top-level API, `redshift-serverless:list_snapshot_copy_configurations`, returning
@@ -306,9 +311,11 @@ Three rules follow:
 2. **`coalesce` every aggregate to an explicit negative.** `coalesce(max(rank), 0)` →
    `'NONE'`; `destinationregion IS NOT NULL` → `false`. Emit a real value for "no", so it can
    be counted, filtered, and charted like any other.
-3. **Type any field whose absence carries meaning; never flatten it to JSON.** A flattened
-   absent struct becomes the string `'null'`, which is truthy under `IS NOT NULL` and inverts
-   the measure. See Constraints §5.
+3. **Never let an absent value become the string `'null'`.** That string is truthy under
+   `IS NOT NULL` and inverts the measure. Two ways to satisfy this, per Constraints §5: type
+   the column as a struct (closed scalar shapes), or keep it a raw-JSON `string` and never
+   serialize a missing value — leave the key absent or `null` rather than writing `to_json(None)`.
+   Both land as SQL `NULL`. What is *not* acceptable is flattening unconditionally.
 
 **Distinguish "no" from "not applicable."** These are different and must not collapse. A
 provisioned cluster without cross-region copy is non-compliant (`false`). A serverless
@@ -382,6 +389,12 @@ Joins `inventory_redshift_clusters_data` + `redshift_cluster_db_revisions_data` 
 `redshift_cluster_tracks`, plus serverless workgroups against `redshift_serverless_tracks`.
 Outputs current vs. latest available revision, a drift flag, `DatabaseRevisionReleaseDate` age
 in days, and pending track switches from `PendingModifiedValues`.
+
+`pendingmodifiedvalues` is a raw-JSON `string` column (Constraints §5), so read the pending
+track with `json_extract_scalar(c.pendingmodifiedvalues, '$.MaintenanceTrackName')` rather than
+struct access. It returns SQL `NULL` both when no modification is pending and when the pending
+change does not involve the track, which is the wanted behaviour — a cluster with nothing
+pending is not "pending an unknown track".
 
 ### View 4 — `redshift_datashare_topology`
 
@@ -483,29 +496,60 @@ Verified against boto3 1.43.102.
    boto3. Use the conditional `Layers` pattern from `module-health-events.yaml:143` against
    `Boto3LayerVersion` (`deploy-data-collection.yaml:1059`).
 
-5. **Nested structures break the JSON crawler.** `DataShareAssociations`,
-   `DeferredMaintenanceWindows`, `RecommendedActions`, `ReferenceLinks`, `UpdateTargets`,
-   `RevisionTargets`, `ClusterNodes`, `IamRoles`, `VpcSecurityGroups`, `PendingModifiedValues`
-   need explicit `array<struct<>>`/`struct<>` Glue types, or the `to_json()`-to-string
-   flattening used for Lambda `Environment` in `module-inventory.yaml:1573`.
+5. **Nested structures: `string` by default, typed struct only for closed scalar shapes.**
+   Per `coding-standards.md` §1.8, a raw-JSON `string` column never drifts and survives API
+   schema changes; typed structs are reserved for stable shapes on a pre-created table. The
+   dividing line that matters in practice is **whether the API type contains a nested list**,
+   because that is what varies and what a hand-written struct silently truncates.
 
-   **Exception — `ClusterSnapshotCopyStatus` must be a typed struct.** Flattening it to a JSON
-   string turns the copy-disabled case into the literal string `'null'` instead of SQL `NULL`,
-   which inverts the cross-region-copy resiliency measure to 100% compliant. Any field whose
-   *absence* carries meaning must be typed, not flattened. See the detection semantics under
-   Resiliency.
+   `string`, because the API type carries a nested list (member that a struct type drops
+   shown in parentheses):
 
-6. **Schedule.** Module default is `rate(14 days)`. Patch/maintenance and Advisor panes need
+   | Field | Nested member |
+   |---|---|
+   | `PendingModifiedValues` | 11 members, varies by pending operation |
+   | `MultiAZSecondary` | `SecondaryClusterInfo.ClusterNodes` |
+   | `Endpoint` (provisioned and serverless) | `Endpoint.VpcEndpoints` / `vpcEndpoints` |
+   | `ClusterParameterGroups` | `ClusterParameterGroupStatus.ClusterParameterStatusList` |
+
+   `PendingModifiedValues` is also already a `string` column on the RDS and ElastiCache tables
+   in `module-inventory.yaml`, so typing it here would be locally inconsistent.
+
+   Typed struct, being closed shapes with only scalar members: `ClusterSnapshotCopyStatus`
+   (see Resiliency for why this one earns it), `DeferredMaintenanceWindows`, `IamRoles`,
+   `VpcSecurityGroups`, `PricePerformanceTarget`. `Tags` must stay
+   `array<struct<Key:string,Value:string>>` regardless — the handler's tag-enrichment loop
+   iterates `obj["Tags"]` and breaks on a string.
+
+   For `module-redshift`'s own tables the same test applies to `DataShareAssociations`,
+   `RecommendedActions`, `ReferenceLinks`, `UpdateTargets` and `RevisionTargets`.
+
+   **No collector change is needed to emit a `string` column.** The SerDe returns the raw JSON
+   text for an object mapped to a `string` column — which is how the existing RDS and
+   ElastiCache `pendingmodifiedvalues` columns work, both collected with plain
+   `paginated_scan` and no serialization step. The `to_json()` flattening of Lambda
+   `Environment` in the handler solves a different problem: env-var keys are arbitrary, so the
+   crawler would otherwise invent unbounded columns. Fixed-key objects do not need it. Note
+   that if a value *is* serialized, it must be guarded (`obj.get(k) is not None`) — `to_json(None)`
+   produces the literal `'null'`, the hazard in the governing principles above.
+
+6. **Scrub `PendingModifiedValues.MasterUserPassword` before the write.** The API can report a
+   pending admin password there, and `paths` collects the object whole, so it would otherwise
+   reach S3 and Glue. Drop the key in the handler alongside the existing `Environment` special
+   case. This is independent of the `string`-vs-struct choice: a typed struct that merely omits
+   the member still leaves the value in the JSONL on S3 — only the Athena projection hides it.
+
+7. **Schedule.** Module default is `rate(14 days)`. Patch/maintenance and Advisor panes need
    **daily** or `NextMaintenanceWindowStartTime` goes stale past the event and Advisor findings
    lag reality.
 
-7. **Timestamp serialization.** Reuse the existing `to_json` helper (ISO-8601 via
+8. **Timestamp serialization.** Reuse the existing `to_json` helper (ISO-8601 via
    `default=lambda x: x.isoformat() ...`). Many Redshift fields are timestamps:
    `ClusterCreateTime`, `CreatedAt`, `CreateTime`, `DatabaseRevisionReleaseDate`,
    `NextMaintenanceWindowStartTime`, `ExpectedNextSnapshotScheduleTime`,
    `customDomainCertificateExpiryTime`.
 
-8. **Regional availability.** Redshift Serverless is not in every region where provisioned
+9. **Regional availability.** Redshift Serverless is not in every region where provisioned
    Redshift exists. Per-region calls must tolerate endpoint/`AccessDenied` errors without
    failing the account — the existing broad `except` in `paginated_scan` covers this, but
    avoid a hardcoded region allowlist like `WORKSPACES_REGIONS` unless measurably needed.
