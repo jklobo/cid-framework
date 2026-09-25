@@ -1221,13 +1221,17 @@ Mappings:
               Type: array<string>
             - Name: deferredmaintenancewindows
               Type: array<struct<DeferMaintenanceIdentifier:string,DeferMaintenanceStartTime:string,DeferMaintenanceEndTime:string>>
+            # Raw JSON string, not a struct: members vary by which modification is
+            # pending. Matches pendingmodifiedvalues on the RDS and ElastiCache tables
+            # above. Parse with json_extract in a view.
             - Name: pendingmodifiedvalues
-              Type: struct<NodeType:string,NumberOfNodes:int,ClusterType:string,ClusterVersion:string,AutomatedSnapshotRetentionPeriod:int,ClusterIdentifier:string,PubliclyAccessible:boolean,EnhancedVpcRouting:boolean,MaintenanceTrackName:string,EncryptionType:string>
+              Type: string
             # MultiAZ is a STRING ("Enabled"/"Disabled"), not a boolean
             - Name: multiaz
               Type: string
+            # Raw JSON string: SecondaryClusterInfo carries a nested ClusterNodes list
             - Name: multiazsecondary
-              Type: struct<AvailabilityZone:string>
+              Type: string
             - Name: encrypted
               Type: boolean
             - Name: publiclyaccessible
@@ -1256,14 +1260,17 @@ Mappings:
               Type: string
             - Name: extracomputeforautomaticoptimization
               Type: string
+            # Raw JSON string: Endpoint carries a nested VpcEndpoints list
             - Name: endpoint
-              Type: struct<Address:string,Port:int>
+              Type: string
             - Name: iamroles
               Type: array<struct<IamRoleArn:string,ApplyStatus:string>>
             - Name: vpcsecuritygroups
               Type: array<struct<VpcSecurityGroupId:string,Status:string>>
+            # Raw JSON string: ClusterParameterGroupStatus carries a nested
+            # ClusterParameterStatusList
             - Name: clusterparametergroups
-              Type: array<struct<ParameterGroupName:string,ParameterApplyStatus:string>>
+              Type: string
             - Name: defaultiamrolearn
               Type: string
             - Name: tags
@@ -1402,8 +1409,9 @@ Mappings:
               Type: string
             - Name: customdomaincertificateexpirytime
               Type: string
+            # Raw JSON string: Endpoint carries a nested vpcEndpoints list
             - Name: endpoint
-              Type: struct<address:string,port:int>
+              Type: string
             - Name: accountid
               Type: string
             - Name: collection_date
@@ -1857,6 +1865,10 @@ Resources:
                                   obj['region'] = region
                                   if 'Environment' in obj and name == 'lambda-functions':
                                       obj['Environment'] = to_json(obj['Environment']) # this property breaks crawler as it has a different key structure
+                                  if name == 'redshift-clusters' and isinstance(obj.get('PendingModifiedValues'), dict):
+                                      # never persist credential material: PendingModifiedValues
+                                      # can carry a pending admin password
+                                      obj['PendingModifiedValues'].pop('MasterUserPassword', None)
                                   file_.write(to_json(obj) + "\n")
                           except Exception as exc:  #pylint: disable=broad-exception-caught
                               logger.info(f"{name} in {region}: {type(exc)} - {exc}")
